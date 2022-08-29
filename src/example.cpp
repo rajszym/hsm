@@ -75,7 +75,7 @@ int main()
 	vcr.message({Event::Play});  // Watching movie
 	vcr.message({Event::Pause}); // A little break
 	vcr.message({Event::Play});  // Resume watching a movie
-	vcr.message({Event::Stop});  // End of the mowie
+	vcr.message({Event::Stop});  // End of the movie
 	vcr.message({Event::Rew});   // Rewind to the beginning
 	vcr.message({Event::Stop});  // Beginning of tape, end of rewinding
 	vcr.message({Event::Rec});   // Now we're gonna record something
