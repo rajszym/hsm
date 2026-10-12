@@ -86,7 +86,9 @@ ifneq ($(filter CLANG,$(DEFS)),)
 $(info Using clang)
 else
 DEFS       := $(DEFS:CLANG=)
+ifeq  ($(filter DEBUG,$(DEFS)),)
 COMMON_F   += -s
+endif
 ifneq ($(filter CONSOLE,$(DEFS)),)
 $(info Using console)
 DEFS       := $(DEFS:CONSOLE=)
@@ -241,6 +243,15 @@ run : all
 	$(info Running the target...)
 	@$(ELF)
 
-.PHONY : all unicode lib clean run
+test : $(BUILD)/test
+	$(info Running the tests...)
+	@$(BUILD)/test
+
+$(BUILD)/test : test/test.cpp $(wildcard hsm/*.hpp) $(MAKEFILE_LIST)
+	$(info $<)
+	mkdir -p $(dir $@)
+	$(CXX) $(CXX_FLAGS) $< -o $@
+
+.PHONY : all unicode lib clean run test
 
 -include $(DEPS)

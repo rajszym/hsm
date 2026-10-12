@@ -36,12 +36,13 @@
 #warning required c++ 17 or above!
 #endif
 
+#include <algorithm>
 #include <functional>
 #include <iterator>
+#include <utility>
 #include <variant>
 #include <vector>
 #include <cassert>
-#include "hsm.hpp"
 #include "hsmconfig.hpp"
 
 namespace hsm {
@@ -52,12 +53,12 @@ namespace hsm {
 
 enum Event : unsigned
 {
-	ALL = 0,// the state action applies to all events
+	ALL = 0,// the state action applies to all user events not handled explicitly by the state
 	Stop,   // stop the state machine
 	Exit,   // exit from the state during transition
 	Entry,  // entry to the state during transition
 	Init,   // init the state after transition
-	User,   // values less than hsmUser are reserved for the system
+	User,   // values less than Event::User are reserved for the system
 };
 
 /* -------------------------------------------------------------------------- */
@@ -76,8 +77,8 @@ struct StateMachine; // *
  *                     - Event::Entry (entry to the state during transition)
  *                     - Event::Init (init the state after transition)
  *                     each state should also handle the necessary user events
- *                     user event values must be greater than or equal to hsmUser
- *                     values less than hsmUser are reserved for the system
+ *                     user event values must be greater than or equal to Event::User
+ *                     values less than Event::User are reserved for the system
  *                     transition is possible, if:
  *                     - handling user events or
  *                     - handling Event::Init and transition to child state
@@ -255,7 +256,7 @@ struct Action
 {
 	Action( State& owner_, unsigned event_ ):                   owner{owner_}, event{event_}, action{& owner_} {}
 	Action( State& owner_, unsigned event_, State&  state_ ):   owner{owner_}, event{event_}, action{& state_} {}
-	Action( State& owner_, unsigned event_, Handler handler_ ): owner{owner_}, event{event_}, action{handler_} {}
+	Action( State& owner_, unsigned event_, Handler handler_ ): owner{owner_}, event{event_}, action{std::move(handler_)} {}
 
 	Action( Action&& ) = default;
 	Action( const Action& ) = default;
@@ -275,7 +276,7 @@ struct Action
 		Visitor(const Message& message_): message{message_} {}
 
 		State* operator()(State*  state_)   const { return state_; }
-		State* operator()(Handler handler_) const { handler_(Action::Visitor::message); return nullptr; }
+		State* operator()(const Handler& handler_) const { handler_(Action::Visitor::message); return nullptr; }
 
 		private:
 		const Message& message;
@@ -284,6 +285,8 @@ struct Action
 /******************************************************************************
  * Name              : hsm::Action::getAction
  * Description       : get action assigned to the given state and event value
+ *                     action with the given event value takes precedence over
+ *                     action with Event::ALL, which applies to user events only
  * Parameters        :
  *             state : state receiving the message
  *             event : event value in the message
@@ -296,12 +299,18 @@ struct Action
 		if (state_ == nullptr)
 			return nullptr;
 
-		Action *action_ = state_->getQueue();
+		Action *any_ = nullptr;
 
-		while (action_ != nullptr && action_->event != event_ && action_->event != Event::ALL)
-			action_ = action_->next;
+		for (Action *action_ = state_->getQueue(); action_ != nullptr; action_ = action_->next)
+		{
+			if (action_->event == event_)
+				return action_;
 
-		return action_;
+			if (any_ == nullptr && action_->event == Event::ALL && event_ >= Event::User)
+				any_ = action_;
+		}
+
+		return any_;
 	}
 
 /******************************************************************************
@@ -310,7 +319,8 @@ struct Action
  * Parameters        :
  *             state : state receiving the message
  *           message : received message
- * Return            : pointer to the assigned action
+ * Return            : transition target state or the given state if no transition
+ *                     nullptr if no action is assigned
  * Note              : for internal use
  ******************************************************************************/
 
@@ -330,8 +340,21 @@ struct Action
 	}
 
 /******************************************************************************
+ * Name              : hsm::Action::unlink
+ * Description       : clear the owner state action queue
+ * Parameters        : none
+ * Return            : none
+ * Note              : for internal use
+ ******************************************************************************/
+
+	void unlink()
+	{
+		Action::owner.setQueue(nullptr);
+	}
+
+/******************************************************************************
  * Name              : hsm::Action::link
- * Description       : link hsm state action to the owner state action queue
+ * Description       : push hsm state action to the front of the owner state action queue
  * Parameters        : none
  * Return            : none
  * Note              : for internal use
@@ -339,11 +362,8 @@ struct Action
 
 	void link()
 	{
-		if (Action::next == nullptr)
-		{
-			Action::next = Action::owner.getQueue();
-			Action::owner.setQueue(this);
-		}
+		Action::next = Action::owner.getQueue();
+		Action::owner.setQueue(this);
 	}
 
 	friend struct StateMachine;
@@ -374,12 +394,19 @@ struct StateMachine
  * Name              : hsm::StateMachine::add
  * Description       : add set of hsm actions to the hsm
  *               tab : std::vector with set of hsm actions
- * Return            : none
+ * Return            : true if actions have been added
+ *                     false if the hsm is running (actions can be added only before start)
  ******************************************************************************/
 
-	void add( const std::vector<Action>& tab_ )
+	bool add( const std::vector<Action>& tab_ )
 	{
+		assert(StateMachine::state == nullptr);
+
+		if (StateMachine::state != nullptr)
+			return false;
+
 		std::copy(std::begin(tab_), std::end(tab_), std::back_inserter(StateMachine::tab));
+		return true;
 	}
 
 /******************************************************************************
@@ -389,14 +416,21 @@ struct StateMachine
  *             owner : hsm action owner (State)
  *             event : hsm action event value
  *    handler, state : variant parameter for hsm action constructor
- * Return            : none
+ * Return            : true if action has been added
+ *                     false if the hsm is running (actions can be added only before start)
  * Note              : declared and defined in header file
  ******************************************************************************/
 
 	template<class T>
-	void add( State& owner_, unsigned event_, T&& action_ )
+	bool add( State& owner_, unsigned event_, T&& action_ )
 	{
-		StateMachine::tab.emplace_back(owner_, event_, action_);
+		assert(StateMachine::state == nullptr);
+
+		if (StateMachine::state != nullptr)
+			return false;
+
+		StateMachine::tab.emplace_back(owner_, event_, std::forward<T>(action_));
+		return true;
 	}
 
 /******************************************************************************
@@ -414,10 +448,13 @@ struct StateMachine
 
 		if (StateMachine::state == nullptr)
 		{
+			// rebuild state action queues, keeping the order of actions in the table
 			for (auto& action_: StateMachine::tab)
-				action_.link();
+				action_.unlink();
+			for (auto action_ = StateMachine::tab.rbegin(); action_ != StateMachine::tab.rend(); ++action_)
+				action_->link();
 
-			StateMachine::transition(&init_, {});
+			StateMachine::transition(&init_, {{}, this});
 		}
 	}
 
@@ -435,7 +472,7 @@ struct StateMachine
 		assert(message_.event == Event::Stop || message_.event >= Event::User);
 
 		if      (message_.event >= Event::User) StateMachine::eventHandler({message_, this});
-		else if (message_.event == Event::Stop) StateMachine::transition(nullptr, {});
+		else if (message_.event == Event::Stop) StateMachine::transition(nullptr, {message_, this});
 	}
 
 /******************************************************************************
