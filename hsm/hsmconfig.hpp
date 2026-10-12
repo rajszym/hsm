@@ -29,8 +29,8 @@
 
  ******************************************************************************/
 
-#ifndef __HSMCONFIG_HPP
-#define __HSMCONFIG_HPP
+#ifndef HSMCONFIG_HPP_
+#define HSMCONFIG_HPP_
 
 namespace hsm {
 
@@ -64,4 +64,4 @@ struct Message
 
 }     //  namespace hsm
 
-#endif//__HSMCONFIG_HPP
+#endif//HSMCONFIG_HPP_

@@ -69,8 +69,10 @@ ifeq  ($(filter CLANG,$(DEFS)),)
 COMMON_F   +=#-Wa,-amhls=$(@:.o=.lst)
 endif
 AS_FLAGS   += -xassembler-with-cpp
+ifeq  ($(filter CLANG,$(DEFS)),)
 C_FLAGS    += -Wlogical-op
 CXX_FLAGS  += -Wlogical-op
+endif
 F_FLAGS    += -cpp
 LD_FLAGS   += -Wl,-Map=$(MAP),--gc-sections
 ifneq ($(filter ISO,$(DEFS)),)
@@ -212,7 +214,7 @@ $(ELF) : $(OBJS)
 	$(info $@)
 	$(LD) $(LD_FLAGS) $(OBJS) $(LIBS) -o $@
 ifneq ($(OS),Windows_NT)
-	@chmod 777 $@
+	@chmod 755 $@
 endif
 
 $(LIB) : $(OBJS)

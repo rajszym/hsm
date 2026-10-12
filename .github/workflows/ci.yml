@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        defs: ["", "DEBUG", "CLANG", "CLANG DEBUG"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build example
+        run: make DEFS="${{ matrix.defs }}"
+      - name: Run tests
+        run: make DEFS="${{ matrix.defs }}" test
