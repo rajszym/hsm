@@ -12,7 +12,10 @@ jobs:
       matrix:
         defs: ["", "DEBUG", "CLANG", "CLANG DEBUG"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: Install LLVM tools
+        if: contains(matrix.defs, 'CLANG')
+        run: sudo apt-get update && sudo apt-get install -y llvm
       - name: Build example
         run: make DEFS="${{ matrix.defs }}"
       - name: Run tests
