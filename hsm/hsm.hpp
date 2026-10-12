@@ -329,6 +329,27 @@ struct StateMachine
 
 /******************************************************************************
  * Name              : hsm::StateMachine::add
+ * Description       : add hsm action handling the event without transition
+ * Parameters        :
+ *             owner : hsm action owner (State)
+ *             event : hsm action event value
+ * Return            : true if action has been added
+ *                     false if the hsm is running (actions can be added only before start)
+ ******************************************************************************/
+
+	bool add( State& owner_, unsigned event_ )
+	{
+		assert(StateMachine::state == nullptr);
+
+		if (StateMachine::state != nullptr)
+			return false;
+
+		StateMachine::tab.emplace_back(owner_, event_);
+		return true;
+	}
+
+/******************************************************************************
+ * Name              : hsm::StateMachine::add
  * Description       : add hsm action with given parameters to the hsm
  * Parameters        :
  *             owner : hsm action owner (State)

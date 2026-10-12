@@ -48,7 +48,7 @@ See [src/example.cpp](src/example.cpp) for a complete example.
   - a `hsm::Handler` (`std::function<void(const hsm::Message&)>`) – an event handler; it may set the transition target with `msg.hsm->transition(state)`,
   - omitted – the event is handled without transition.
 - `hsm::StateMachine` – a set of actions:
-  - `add(...)` – adds actions; possible only when the machine is not running (returns `false` otherwise),
+  - `add(table)`, `add(owner, event, target)`, `add(owner, event)` – adds actions; possible only when the machine is not running (returns `false` otherwise),
   - `start(state)` – starts the machine in the given state (entering all its ancestors),
   - `message(msg)` – handles the user event, or `hsm::Event::Stop` which exits all states and stops the machine; the machine can be started again.
 - `hsm::Message` – defined in [hsm/hsmconfig.hpp](hsm/hsmconfig.hpp); add your own data and constructors there. `msg.hsm` points to the handling state machine, `msg.event` is the event value.

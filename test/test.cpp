@@ -81,6 +81,7 @@ static void testAdd()
 	sm.start(A);
 #ifdef NDEBUG // with assertions enabled adding to the running hsm aborts
 	CHECK(!sm.add(B, Back, A));
+	CHECK(!sm.add(B, Back));
 	CHECK(!sm.add({{ B, Back, A }}));
 #endif
 	sm.message({Go});
@@ -98,6 +99,24 @@ static void testAdd()
 	sm.message({Back});
 	sm.message({hsm::Event::Stop});
 	CHECK(trace == "aba");
+
+	// action added without target handles the event without transition,
+	// so the event is not passed to the parent state
+	hsm::State P, C(P), Q;
+	hsm::StateMachine sm2;
+
+	trace.clear();
+	CHECK(sm2.add(P, Go, Q));
+	CHECK(sm2.add(C, Go));
+	CHECK(sm2.add(Q, hsm::Event::Entry, put("+Q")));
+	sm2.start(C);
+	sm2.message({Go});
+	CHECK(trace == "");
+	sm2.message({hsm::Event::Stop});
+	sm2.start(P);
+	sm2.message({Go});
+	sm2.message({hsm::Event::Stop});
+	CHECK(trace == "+Q");
 }
 
 /* -------------------------------------------------------------------------- */
